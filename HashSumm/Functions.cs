@@ -21,19 +21,19 @@ namespace HashSumm
             var param = paramObj as Parametrs;
             if (param == null) return;
             param.SourceMutex.WaitOne();
-            Queue<ResultData> souceData = param.Source as Queue<ResultData>;
+            ResutsHash souceData = param.Source as ResutsHash;
             param.SourceMutex.ReleaseMutex();
             IRepository Repository=new RepositorySql();
             
             while (!param.FlagStop)
             {
                 param.SourceMutex.WaitOne();
-                var f = souceData.Any();
+                var f = souceData.Datas.Any();
                 param.SourceMutex.ReleaseMutex();
                 if (f)
                 {
                     param.SourceMutex.WaitOne();
-                    var d=souceData.Dequeue();
+                    var d=souceData.Datas.Dequeue();
                     param.SourceMutex.ReleaseMutex();
                     if (d.IsError)
                     {
@@ -62,6 +62,8 @@ namespace HashSumm
         };
 
 
+        
+
         public static Action<object> CalculateHashSumm = delegate (object paramObj)
         {
 
@@ -71,10 +73,11 @@ namespace HashSumm
             Queue<string> soucePaths = param.Source as Queue<string>;
             param.SourceMutex.ReleaseMutex();
             param.OutputMutex.WaitOne();
-            Queue<ResultData> output = param.Output as Queue<ResultData>;
+            ResutsHash output = param.Output as ResutsHash;
+            param.OnInfoMessage("Количество обработанных файлов: " + output.Count);
             param.OutputMutex.ReleaseMutex();
-            int count = 0;
-            param.OnInfoMessage("Количество обработанных файлов: " + count);
+            
+            
             while (!param.FlagStop)
             {
                 param.SourceMutex.WaitOne();
@@ -90,15 +93,21 @@ namespace HashSumm
                 
                 using (var md5 = MD5.Create())
                 {
-                    using (var stream = File.OpenRead(fileName))
+                    try
                     {
-                        string result = Encoding.Default.GetString(md5.ComputeHash(stream));
-                        param.OutputMutex.WaitOne();
-                        output.Enqueue(new ResultData(){Value =result,Path = fileName});
-                        param.OutputMutex.ReleaseMutex();
-
-                        count++;
-                        param.OnInfoMessage("Количество обработанных файлов: " + count);
+                        using (var stream = File.OpenRead(fileName))
+                        {
+                            string result = Encoding.Default.GetString(md5.ComputeHash(stream));
+                            param.OutputMutex.WaitOne();
+                            output.Datas.Enqueue(new ResultData(){Value =result,Path = fileName});
+                            output.Count++;
+                            param.OnInfoMessage("Количество обработанных файлов: " + output.Count);
+                            param.OutputMutex.ReleaseMutex();
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        param.OnErrorMessage(e.Message, fileName);
                     }
                 }
             }
@@ -153,5 +162,11 @@ namespace HashSumm
         public string Path { get; set; }
         public string Value { get; set; }
         public bool IsError { get; set; } = false;
+    }
+
+    public class ResutsHash
+    {
+        public Queue<ResultData> Datas { get; set; }
+        public int Count { get; set; }
     }
 }

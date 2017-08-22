@@ -21,7 +21,7 @@ namespace HashSumm
             FolderBrowserDialog FBD = new FolderBrowserDialog();
             if (FBD.ShowDialog() == DialogResult.OK)
             {
-                pathToCalk=FBD.SelectedPath;
+                pathToCalk = FBD.SelectedPath;
             }
             else
             {
@@ -35,7 +35,7 @@ namespace HashSumm
             Queue<string> Files = new Queue<string>();
             Mutex FilesMutex = new Mutex();
 
-            Queue<ResultData> Datas = new Queue<ResultData>();
+            var Results=new ResutsHash(){ Datas = new Queue<ResultData>(), Count=0};
             Mutex DatasMutex = new Mutex();
 
             var ParametrsSearchFile = new Parametrs();
@@ -47,28 +47,38 @@ namespace HashSumm
             ParametrsSearchFile.InfoMessage += delegate (string mes, string path) { SearchMes = mes; };
             ParametrsSearchFile.ErrorMessage += Parametrs_ErrorMessage;
 
-
-
-            var ParametrsCalcSumm = new Parametrs();
-            ParametrsCalcSumm.Action = Functions.CalculateHashSumm;
-            ParametrsCalcSumm.Source = Files;
-            ParametrsCalcSumm.SourceMutex = FilesMutex;
-            ParametrsCalcSumm.Output = Datas;
-            ParametrsCalcSumm.OutputMutex = DatasMutex;
-            ParametrsCalcSumm.InfoMessage += delegate (string mes, string path) { CalculateMes = mes; };
-            ParametrsCalcSumm.ErrorMessage += Parametrs_ErrorMessage;
-
             var ParametrsSave = new Parametrs();
             ParametrsSave.Action = Functions.SaveDatas;
-            ParametrsSave.Source = Datas;
+            ParametrsSave.Source = Results;
             ParametrsSave.SourceMutex = DatasMutex;
             ParametrsSave.ErrorMessage += Parametrs_ErrorMessage;
 
 
             List<Parametrs> parametrs = new List<Parametrs>();
             parametrs.Add(ParametrsSearchFile);
-            parametrs.Add(ParametrsCalcSumm);
+
             parametrs.Add(ParametrsSave);
+
+            for (int i = 0; i < Environment.ProcessorCount; i++)
+            {
+                var ParametrsCalcSumm = new Parametrs();
+                ParametrsCalcSumm.Action = Functions.CalculateHashSumm;
+                ParametrsCalcSumm.Source = Files;
+                ParametrsCalcSumm.SourceMutex = FilesMutex;
+                ParametrsCalcSumm.Output = Results;
+                ParametrsCalcSumm.OutputMutex = DatasMutex;
+                ParametrsCalcSumm.InfoMessage += delegate (string mes, string path) { CalculateMes = mes; };
+                ParametrsCalcSumm.ErrorMessage += Parametrs_ErrorMessage;
+                parametrs.Add(ParametrsCalcSumm);
+            }
+
+
+
+
+
+
+
+
 
             foreach (Parametrs parametr in parametrs)
             {
@@ -76,7 +86,7 @@ namespace HashSumm
                         {
                             var d = new ResultData { IsError = true, Path = path, Value = mes };
                             DatasMutex.WaitOne();
-                            Datas.Enqueue(d);
+                            Results.Datas.Enqueue(d);
                             DatasMutex.ReleaseMutex();
                         };
                 parametr.Start();
@@ -85,7 +95,7 @@ namespace HashSumm
 
             var t = new Thread(GetInput);
             t.Start();
-            while (ParametrsSearchFile.Thread.IsAlive || Datas.Any() || Files.Any())
+            while (ParametrsSearchFile.Thread.IsAlive || Results.Datas.Any() || Files.Any())
             {
                 InfoMessage();
                 Console.WriteLine("Для выхода нажните Esc");
