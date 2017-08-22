@@ -20,13 +20,17 @@ namespace HashSumm
         {
             var param = paramObj as Parametrs;
             if (param == null) return;
+            param.SourceMutex.WaitOne();
             Queue<ResultData> souceData = param.Source as Queue<ResultData>;
-            
+            param.SourceMutex.ReleaseMutex();
             IRepository Repository=new RepositorySql();
             
             while (!param.FlagStop)
             {
-                if (souceData.Any())
+                param.SourceMutex.WaitOne();
+                var f = souceData.Any();
+                param.SourceMutex.ReleaseMutex();
+                if (f)
                 {
                     param.SourceMutex.WaitOne();
                     var d=souceData.Dequeue();
@@ -63,16 +67,20 @@ namespace HashSumm
 
             var param = paramObj as Parametrs;
             if (param == null) return;
-
+            param.SourceMutex.WaitOne();
             Queue<string> soucePaths = param.Source as Queue<string>;
+            param.SourceMutex.ReleaseMutex();
+            param.OutputMutex.WaitOne();
             Queue<ResultData> output = param.Output as Queue<ResultData>;
-
+            param.OutputMutex.ReleaseMutex();
             int count = 0;
             param.OnInfoMessage("Количество обработанных файлов: " + count);
             while (!param.FlagStop)
             {
-                
-                if (!soucePaths.Any())
+                param.SourceMutex.WaitOne();
+                var f = !soucePaths.Any();
+                param.SourceMutex.ReleaseMutex();
+                if (f)
                 {
                     Thread.Sleep(500);continue;
                 }
@@ -109,7 +117,9 @@ namespace HashSumm
 
         static void RunSeach(string path, Parametrs param, ref int count)
         {
+            param.OutputMutex.WaitOne();
             var OutPut = param.Output as Queue<string>;
+            param.OutputMutex.ReleaseMutex();
             try
             {
                 var files = Directory.GetFiles(path);
